@@ -1,0 +1,126 @@
+<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Bộ lọc tin nhắn rác bằng SVM</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mu:#667;--bd:#d9dde5;--ac:#2563eb;--ok:#15803d;--bad:#dc2626}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151c;--card:#1b2030;--tx:#e8ebf2;--mu:#99a;--bd:#2d3447;--ac:#6ea0ff;--ok:#4ade80;--bad:#f87171}}
+:root[data-theme="dark"]{--bg:#12151c;--card:#1b2030;--tx:#e8ebf2;--mu:#99a;--bd:#2d3447;--ac:#6ea0ff;--ok:#4ade80;--bad:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:900px;margin:0 auto;padding:16px}h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.g .card{margin:0}
+textarea,input,button{font:inherit;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);padding:8px 10px}
+textarea{width:100%;box-sizing:border-box;resize:vertical}button{cursor:pointer;background:var(--card)}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}.mu{color:var(--mu);font-size:13px}
+.chip{display:inline-block;padding:2px 9px;margin:2px;border-radius:99px;font-size:12px;border:1px solid var(--bd);cursor:pointer}
+.sp{background:rgba(220,38,38,.13);color:var(--bad);border-color:transparent}.hm{background:rgba(21,128,61,.13);color:var(--ok);border-color:transparent}
+.verdict{font-size:24px;font-weight:700}.bar{height:10px;border-radius:99px;background:linear-gradient(90deg,var(--ok),var(--bd),var(--bad));position:relative;margin:10px 0}
+.bar i{position:absolute;top:-4px;width:4px;height:18px;background:var(--tx);border-radius:2px}
+table{border-collapse:collapse;font-size:13px;width:100%}td,th{border:1px solid var(--bd);padding:4px 8px;text-align:center}.wrap{overflow-x:auto}
+</style></head><body><main>
+<h1>Bộ lọc tin nhắn rác (Spam) bằng SVM</h1>
+<p class="mu" style="margin-top:0">TF-IDF + Linear SVM chạy ngay trên trình duyệt. Huấn luyện bằng dữ liệu của chính bạn và thử phân loại tin nhắn thật.</p>
+<div class="card"><h2>1. Kiểm tra một tin nhắn</h2>
+<textarea id="msg" rows="3" placeholder="Dán tin nhắn cần kiểm tra vào đây..."></textarea>
+<div class="row"><button class="p" id="go">Kiểm tra</button><span class="mu">Thử mẫu:</span><span id="ex"></span></div>
+<div id="out" style="margin-top:12px"></div></div>
+<div class="g">
+<div class="card"><h2>2. Chất lượng mô hình</h2><div id="met" class="mu"></div></div>
+<div class="card"><h2>Từ khóa SVM học được</h2><div class="mu">Spam:</div><div id="ts"></div><div class="mu">Bình thường:</div><div id="th"></div></div></div>
+<div class="card" style="margin-top:12px"><h2>3. Dữ liệu huấn luyện <span class="mu" id="cnt"></span></h2>
+<p class="mu" style="margin:0 0 6px">Mỗi dòng một tin, dạng <code>spam,nội dung</code> hoặc <code>ham,nội dung</code>. Thêm dữ liệu của bạn rồi bấm huấn luyện lại để mô hình tốt hơn.</p>
+<textarea id="imp" rows="4" placeholder="spam,Bạn trúng thưởng 10 triệu, bấm link nhận ngay&#10;ham,Mai 8h họp nhóm ở phòng A2"></textarea>
+<div class="row"><button class="p" id="add">Thêm &amp; huấn luyện lại</button><button id="rs">Khôi phục dữ liệu mẫu</button></div>
+<p class="mu" style="margin-bottom:0">Dữ liệu mẫu chỉ có ~60 tin để minh họa. Muốn dùng thật cần hàng nghìn tin để đủ chính xác.</p></div>
+<script>
+let DATA=[
+["spam","Chúc mừng bạn đã trúng thưởng 50 triệu đồng! Truy cập http://nhan-qua.vn để nhận ngay"],
+["spam","Vay tiền nhanh online, duyệt trong 5 phút, không cần thế chấp. Liên hệ 0901234567"],
+["spam","Tài khoản ngân hàng của bạn bị khóa. Đăng nhập tại http://vcb-secure.xyz để xác minh ngay"],
+["spam","KHUYẾN MÃI SỐC giảm giá 70% hôm nay duy nhất, mua ngay kẻo hết"],
+["spam","Tuyển cộng tác viên làm việc tại nhà, lương 15 triệu/tháng, không cần kinh nghiệm"],
+["spam","Bạn được tặng 100GB data miễn phí, soạn tin DK gửi 9029 để nhận quà"],
+["spam","Nhà cái uy tín tặng 100% nạp đầu, đăng ký nhận 888k miễn phí tại http://88bet.win"],
+["spam","Thẻ tín dụng hạn mức 200 triệu, mở thẻ miễn phí không chứng minh thu nhập, gọi ngay"],
+["spam","Cảnh báo: SIM của bạn sẽ bị khóa sau 24h, bấm vào link để cập nhật thông tin thuê bao"],
+["spam","Kiếm tiền online mỗi ngày 500k chỉ với điện thoại, đăng ký tham gia nhóm ngay"],
+["spam","Bạn là khách hàng may mắn, quay số trúng iPhone 15, nhấn vào link nhận thưởng"],
+["spam","Giảm giá cực sốc mỹ phẩm chính hãng, mua 1 tặng 1, inbox để nhận ưu đãi"],
+["spam","Hỗ trợ vay tín chấp lãi suất thấp 0%, giải ngân trong ngày, liên hệ ngay"],
+["spam","Đầu tư tiền ảo lãi 30% mỗi tuần, cam kết lợi nhuận, tham gia nhóm kín ngay hôm nay"],
+["spam","Mã giảm giá 500k cho đơn đầu tiên, nhấn http://shop-sale.top để nhận voucher"],
+["spam","Thông báo: bạn đã trúng xe máy SH, vui lòng chuyển phí nhận thưởng 2 triệu"],
+["spam","Cần tuyển nhân viên nhập liệu tại nhà, thu nhập 20 triệu, chỉ cần có điện thoại"],
+["spam","Ưu đãi đặc biệt dành riêng cho bạn: tặng ngay 200k khi nạp thẻ, hết hạn trong hôm nay"],
+["spam","Đăng nhập tài khoản ngay để tránh bị khóa, xác thực OTP tại link sau"],
+["spam","Thuốc tăng cường sinh lý chính hãng, giao hàng kín đáo, giảm 50% hôm nay"],
+["spam","Bạn có khoản tiền chưa nhận 15.000.000đ, bấm link xác nhận để nhận tiền"],
+["spam","Casino trực tuyến, đăng ký tặng ngay 300k, rút tiền nhanh trong 3 phút"],
+["spam","Khoá học kiếm tiền triệu mỗi ngày, học phí ưu đãi chỉ còn 99k, đăng ký ngay"],
+["spam","Trúng thưởng lớn! Nhắn tin theo cú pháp TT gửi 8099 để nhận giải thưởng"],
+["spam","Free ship toàn quốc, sale 90% chỉ trong hôm nay, click ngay http://sieu-sale.vn"],
+["spam","Bạn đã được duyệt khoản vay 30 triệu, vui lòng đóng phí bảo hiểm khoản vay để nhận tiền"],
+["spam","Đơn hàng của bạn gặp sự cố, bấm http://giao-hang-nhanh.cc để cập nhật địa chỉ"],
+["spam","Mua sỉ giá rẻ tận gốc, chiết khấu cao, liên hệ zalo để nhận báo giá"],
+["spam","Chương trình tri ân khách hàng: nạp thẻ nhận gấp đôi, đăng ký ngay hôm nay"],
+["ham","Tối nay 7h mình đi ăn bún chả nhé, bạn rủ thêm Nam luôn"],
+["ham","Mai thầy đổi lịch học sang phòng B203, nhớ mang laptop nhé"],
+["ham","Mẹ ơi con về muộn một chút, mẹ ăn cơm trước đi"],
+["ham","Bạn gửi giúp mình file báo cáo chương 3 trước 9h sáng mai được không"],
+["ham","Cảm ơn bạn nhiều nha, hôm qua nhờ bạn mà mình làm kịp bài"],
+["ham","Chiều nay họp nhóm đồ án lúc 3h ở thư viện, mọi người nhớ đến đúng giờ"],
+["ham","Anh ơi cuối tuần này em về quê, anh có gửi gì cho ba mẹ không"],
+["ham","Deadline nộp bài tập lớn là thứ sáu, bạn làm tới đâu rồi"],
+["ham","Mình đang trên đường tới rồi, chờ mình khoảng 10 phút nha"],
+["ham","Hôm nay trời mưa to quá, bạn nhớ mang áo mưa đi học nhé"],
+["ham","Sinh nhật Lan vào thứ bảy, cả lớp góp tiền mua quà nha"],
+["ham","Bạn cho mình mượn vở môn giải tích chút được không"],
+["ham","Em đã xem lại slide rồi, thầy cho em hỏi phần kernel với ạ"],
+["ham","Tối qua xem trận bóng hay không, mình ngủ quên mất"],
+["ham","Nhớ đóng tiền điện nước tháng này nhé, hóa đơn mình để trên bàn rồi"],
+["ham","Chị ơi cho em xin địa chỉ quán cà phê hôm trước chị nói"],
+["ham","Chủ nhật này cả nhà đi chơi Đà Lạt, con nhớ sắp xếp đồ sớm"],
+["ham","Bài thuyết trình của nhóm mình ổn rồi, mai chỉ cần tập lại một lần nữa"],
+["ham","Mình vừa đặt xe rồi, khoảng 15 phút nữa tới nhà bạn"],
+["ham","Bạn ơi buổi thực hành tuần sau có cần mang máy tính không"],
+["ham","Anh gửi em tài liệu dự án rồi, em xem rồi góp ý giúp anh nhé"],
+["ham","Hôm nay mình bị cảm nên xin nghỉ học, bạn ghi bài giúp mình với"],
+["ham","Ba mẹ gọi hỏi thăm, cuối tuần con nhớ gọi về nhà nhé"],
+["ham","Cô giáo thông báo lớp mình nghỉ buổi sáng thứ hai, học bù vào thứ năm"],
+["ham","Mình đã chuyển tiền ăn hôm qua cho bạn rồi, bạn kiểm tra giúp mình nhé"],
+["ham","Tối nay nấu cơm giúp mẹ nhé, mẹ về trễ"],
+["ham","Anh em trong nhóm nhớ commit code trước 5h chiều để mai test"],
+["ham","Quán cơm gần trường hôm nay có món mới, trưa nay đi thử không"],
+["ham","Bạn nhớ mang chứng minh thư khi đi thi nhé, phòng thi dán trên bảng rồi"],
+["ham","Cuối tuần này rảnh không, mình đi đá bóng với mấy đứa bạn"],
+["ham","Em gửi thầy bản nháp báo cáo, thầy xem giúp em phần kết luận ạ"],
+["ham","Đơn hàng sách của bạn đã giao, shipper gọi bạn ra nhận ở cổng ký túc xá"]].map(([l,t])=>({y:l=="spam"?1:-1,t}));const SEED=DATA.slice();
+// ---- SVM tuyến tính trên TF-IDF (Pegasos) ----
+const norm=s=>s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d");
+function tok(s){s=norm(s).replace(/https?:\/\/\S+|www\.\S+/g," urltok ").replace(/\d{9,}/g," sdt ").replace(/(\d)[.,](?=\d{3})/g,"$1");const w=s.split(/[^a-z0-9]+/).filter(Boolean),o=[...w];for(let i=0;i<w.length-1;i++)o.push(w[i]+"_"+w[i+1]);return o}
+function build(rows){const df={};rows.forEach(r=>new Set(tok(r.t)).forEach(k=>df[k]=(df[k]||0)+1));const voc={},idf=[];Object.keys(df).forEach(k=>{voc[k]=idf.length;idf.push(Math.log((1+rows.length)/(1+df[k]))+1)});return{voc,idf,names:Object.keys(voc)}}
+function vec(t,V){const c={};tok(t).forEach(k=>{if(k in V.voc)c[V.voc[k]]=(c[V.voc[k]]||0)+1});let n=0;const v=[];for(const i in c){const x=(1+Math.log(c[i]))*V.idf[i];v.push([+i,x]);n+=x*x}n=Math.sqrt(n)||1;return v.map(([i,x])=>[i,x/n])}
+function rng(s){return()=>(s=(s*1664525+1013904223)>>>0)/4294967296}
+function train(rows,lam=0.01,ep=150){const V=build(rows),X=rows.map(r=>vec(r.t,V)),w=new Float64Array(V.idf.length);let b=0,t=10,s=1;const r=rng(1),n=rows.length;
+ for(let e=0;e<ep*n;e++){const i=Math.floor(r()*n),eta=1/(lam*t++);let sc=b;for(const[k,x]of X[i])sc+=s*w[k]*x;s*=1-eta*lam;if(s<1e-9){for(let k=0;k<w.length;k++)w[k]*=s;s=1}
+  if(rows[i].y*sc<1){for(const[k,x]of X[i])w[k]+=eta*rows[i].y*x/s;b+=eta*rows[i].y*0.1}}
+ for(let k=0;k<w.length;k++)w[k]*=s;return{V,w,b}}
+function score(m,t){let s=m.b;for(const[k,x]of vec(t,m.V))s+=m.w[k]*x;return s}
+function cv(rows,K=5){const r=rng(3),idx=rows.map((_,i)=>i).sort(()=>r()-.5);let tp=0,fp=0,fn=0,tn=0;
+ for(let k=0;k<K;k++){const te=idx.filter((_,i)=>i%K==k),tr=idx.filter((_,i)=>i%K!=k),m=train(tr.map(i=>rows[i]));te.forEach(i=>{const p=score(m,rows[i].t)>0?1:-1,y=rows[i].y;if(p==1&&y==1)tp++;else if(p==1)fp++;else if(y==1)fn++;else tn++})}
+ return{tp,fp,fn,tn,acc:(tp+tn)/rows.length,p:tp/(tp+fp||1),r:tp/(tp+fn||1)}}
+// ---- UI ----
+const $=id=>document.getElementById(id);let M;
+function refresh(){M=train(DATA);const n1=DATA.filter(d=>d.y==1).length;$("cnt").textContent=`(${DATA.length} tin: ${n1} spam, ${DATA.length-n1} bình thường)`;
+ const c=cv(DATA),f=c.p+c.r?2*c.p*c.r/(c.p+c.r):0;$("met").innerHTML=`<table><tr><th>Accuracy</th><th>Precision (spam)</th><th>Recall (spam)</th><th>F1</th></tr><tr><td>${(c.acc*100).toFixed(1)}%</td><td>${(c.p*100).toFixed(1)}%</td><td>${(c.r*100).toFixed(1)}%</td><td>${(f*100).toFixed(1)}%</td></tr></table><p>Đo bằng 5-fold cross-validation. Nhầm tin thường thành spam: <b>${c.fp}</b>, bỏ sót spam: <b>${c.fn}</b>.</p>`;
+ const o=M.V.names.map((k,i)=>[k,M.w[i]]).filter(([k])=>!k.includes("_")).sort((a,b)=>b[1]-a[1]);
+ $("ts").innerHTML=o.slice(0,12).map(([k])=>`<span class="chip sp">${k}</span>`).join("");$("th").innerHTML=o.slice(-12).reverse().map(([k])=>`<span class="chip hm">${k}</span>`).join("");}
+function check(){const t=$("msg").value.trim();if(!t){$("out").innerHTML='<span class="mu">Hãy nhập tin nhắn.</span>';return}
+ const s=score(M,t),sp=s>0,cs=vec(t,M.V).map(([k,x])=>[M.V.names[k],M.w[k]*x]).filter(a=>Math.abs(a[1])>.01).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,8),pos=Math.max(2,Math.min(98,50+s*40));
+ $("out").innerHTML=`<div class="verdict" style="color:var(--${sp?"bad":"ok"})">${sp?"⚠️ Có khả năng là SPAM":"✅ Tin nhắn bình thường"}</div><div class="bar"><i style="left:${pos}%"></i></div><div class="mu">Điểm SVM: ${s>=0?"+":""}${s.toFixed(2)} (dương = spam, âm = bình thường; càng xa 0 càng chắc)</div>`+(cs.length?`<div style="margin-top:6px" class="mu">Từ ảnh hưởng nhiều nhất: ${cs.map(([k,v])=>`<span class="chip ${v>0?"sp":"hm"}">${k.replace("_"," ")}</span>`).join("")}</div>`:`<div class="mu" style="margin-top:6px">Không có từ nào quen với mô hình, kết quả kém tin cậy.</div>`)}
+const EX=["Chúc mừng bạn trúng thưởng 20 triệu, bấm http://nhan.top để nhận","Mai 8h họp nhóm ở thư viện nhé","Vay nhanh 50 triệu không cần thế chấp, gọi 0988123456","Tối nay đi ăn gì không?"];
+$("ex").innerHTML=EX.map((e,i)=>`<span class="chip" data-i="${i}">${e.slice(0,22)}…</span>`).join("");
+$("ex").onclick=e=>{const i=e.target.dataset.i;if(i!==undefined){$("msg").value=EX[i];check()}};$("go").onclick=check;
+$("add").onclick=()=>{let n=0;$("imp").value.split("\n").forEach(l=>{const m=l.match(/^\s*(spam|ham)\s*[,;\t]\s*(.+)$/i);if(m){DATA.push({y:m[1].toLowerCase()=="spam"?1:-1,t:m[2].trim()});n++}});if(!n){alert("Không có dòng hợp lệ. Dạng: spam,nội dung hoặc ham,nội dung");return}$("imp").value="";refresh();if($("msg").value.trim())check()};
+$("rs").onclick=()=>{DATA=SEED.slice();refresh();$("out").innerHTML=""};
+refresh();
+</script></main></body></html>
